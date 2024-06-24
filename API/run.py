@@ -29,7 +29,7 @@ def login():
     elif userrole.lower() == 'user':    
         if username and userid and userrole and timestamp:
             user_requests[username] = {'userid': userid, 'userrole': userrole, 'timestamp': timestamp}
-            active_users.add((username,timestamp))
+            # active_users.add((username,timestamp))
             return jsonify({'redirect': f'/waiting/{username}'})
     else:
         return jsonify({'error': 'User role invalid'}), 400
@@ -41,18 +41,32 @@ def liveagent_dashboard():
     print("[DASHBOARD] Live agent dashboard accessed.")
     return jsonify({"user_requests": user_requests})
 
+
 @app.route('/active_users', methods=['GET'])
 def active_users_route():
-    users = [username for username in active_users if username in approved_requests and username != 'liveagent']
+    users = [
+        {'username': username, 
+        'timestamp': details['timestamp']
+        } 
+        for username, details in approved_requests.items()
+        ]
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print("[ACTIVE USERS] Active users fetched.")
-    return jsonify({'active_users': users, 'timestamp':timestamp})
+    return jsonify({'active_users': users})
+
+# @app.route('/active_users', methods=['GET'])
+# def active_users_route():
+#     users = [username for username in active_users if username in approved_requests and username != 'liveagent']
+#     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#     print("[ACTIVE USERS] Active users fetched.")
+#     return jsonify({'active_users': users, 'timestamp':timestamp})
 
 @app.route('/approve_request/<username>', methods=['POST'])
 def approve_request(username):
     if username in user_requests:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         approved_requests[username] = user_requests.pop(username)
+        active_users.add(username)  
         socketio.emit('request_approved', {'username': username, 'timestamp': timestamp}, room=username)
         print(f"[APPROVE] User {username} approved and moved to approved requests.")
         return jsonify({'message': 'User approved successfully', 'timestamp': timestamp}), 200
