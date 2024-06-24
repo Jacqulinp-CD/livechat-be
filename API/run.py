@@ -50,7 +50,7 @@ def active_users_route():
         } 
         for username, details in approved_requests.items()
         ]
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print("[ACTIVE USERS] Active users fetched.")
     return jsonify({'active_users': users})
 
