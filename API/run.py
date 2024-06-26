@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,session
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from datetime import datetime
 from flask_cors import CORS
@@ -12,6 +12,55 @@ user_requests = {}
 messages = {}
 approved_requests = {}
 active_users = set()
+
+@app.route('/session', methods=['GET'])
+def session_data():
+    return jsonify(dict(session))
+
+@app.route('/get_user_details', methods=['GET', 'POST'])
+def get_user_details():
+    if request.method == 'GET':
+        return jsonify({'message': 'Please enter your username:'})
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        username = data.get('username')
+        phone_number = data.get('phone_number')
+        
+        if 'username' not in data:
+            return jsonify({'error': 'Username is required'}), 400
+        
+        if 'phone_number' not in data:
+            return jsonify({'message': 'Please enter your phone_number'}), 400
+        
+        else:
+            return jsonify({
+                'message': f'Thank you {username}, your phone number {phone_number} has been recorded.',
+                'username': username,
+                'phone_number': phone_number
+            })
+
+# @app.route('/get_user_details', methods=['GET', 'POST'])
+# def get_user_details():
+#     if request.method == 'GET':
+#         return jsonify({'message': 'Please enter your username:'})
+#     elif request.method == 'POST':
+#         data = request.get_json()
+#         username = data.get('username')
+#         phone_number = data.get('phone_number')
+        
+#         if username in data:
+#             if not username:
+#                 return jsonify({'error': 'Username is required'}), 400
+        
+#             return jsonify({'message': 'Please enter your phone_number:'})
+#         else:
+#             if not phone_number:
+#                 return jsonify({'message': 'Please enter your phone_number'}), 400
+#         if username and phone_number:
+#                 return jsonify({'message': f'Thank you {username}, your phone number {phone_number} has been recorded.',"username":username,"phone_number":phone_number})
+#     else:
+#         return jsonify({'error': 'Invalid request method'}), 405
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -45,14 +94,17 @@ def liveagent_dashboard():
 @app.route('/active_users', methods=['GET'])
 def active_users_route():
     users = [
-        {'username': username, 
+        {
+        'username': username, 
         'timestamp': details['timestamp']
         } 
         for username, details in approved_requests.items()
         ]
+    len(users)
+    print(len(users))
     # timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print("[ACTIVE USERS] Active users fetched.")
-    return jsonify({'active_users': users})
+    return jsonify({'active_users': users,'length':len(users)})
 
 # @app.route('/active_users', methods=['GET'])
 # def active_users_route():
@@ -77,12 +129,12 @@ def approve_request(username):
 @app.route('/approved_request/<username>', methods=['GET'])
 def approved_request(username):
     if username in approved_requests:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[APPROVE] User {username} approved and moved to approved requests.")
-        return jsonify({'message': 'User approved successfully', 'username': username, 'timestamp': timestamp}), 200
+        return jsonify({'message': 'User approved successfully', 'username': username,}), 200
     else:
         print(f"[APPROVE ERROR] User {username} not found.")
-        return jsonify({'error': 'User not found', 'timestamp': timestamp}), 404
+        return jsonify({'error': 'User not found'}), 404
 
 @app.route('/get_user_requests', methods=['GET'])
 def get_user_requests():
@@ -97,7 +149,7 @@ def get_user_requests():
         for username, details in user_requests.items()
     ]
     print("[USER REQUESTS] User requests fetched.")
-    return jsonify({'user_requests': requests})
+    return jsonify({'user_requests': requests,'length':len(requests)})
 
 @app.route('/waiting/<username>', methods=['GET'])
 def waiting(username):
