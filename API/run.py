@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify,session
+from flask import Flask, request, jsonify, session
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from datetime import datetime
 from flask_cors import CORS
@@ -40,28 +40,6 @@ def get_user_details():
                 'phone_number': phone_number
             })
 
-# @app.route('/get_user_details', methods=['GET', 'POST'])
-# def get_user_details():
-#     if request.method == 'GET':
-#         return jsonify({'message': 'Please enter your username:'})
-#     elif request.method == 'POST':
-#         data = request.get_json()
-#         username = data.get('username')
-#         phone_number = data.get('phone_number')
-        
-#         if username in data:
-#             if not username:
-#                 return jsonify({'error': 'Username is required'}), 400
-        
-#             return jsonify({'message': 'Please enter your phone_number:'})
-#         else:
-#             if not phone_number:
-#                 return jsonify({'message': 'Please enter your phone_number'}), 400
-#         if username and phone_number:
-#                 return jsonify({'message': f'Thank you {username}, your phone number {phone_number} has been recorded.',"username":username,"phone_number":phone_number})
-#     else:
-#         return jsonify({'error': 'Invalid request method'}), 405
-
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -77,9 +55,9 @@ def login():
         return jsonify({'redirect': '/liveagent','username':username,'userrole':userrole,'userid':userid})
     elif userrole.lower() == 'user':    
         if username and userid and userrole and timestamp:
-            user_requests[username] = {'userid': userid, 'userrole': userrole, 'timestamp': timestamp}
-            # active_users.add((username,timestamp))
+            user_requests[userid] = {'username': username, 'userrole': userrole, 'timestamp': timestamp}
             return jsonify({'redirect': f'/waiting/{username}'})
+        print("user request added")
     else:
         return jsonify({'error': 'User role invalid'}), 400
 
@@ -89,71 +67,65 @@ def login():
 def liveagent_dashboard():
     print("[DASHBOARD] Live agent dashboard accessed.")
     return jsonify({"user_requests": user_requests})
-
+    
 
 @app.route('/active_users', methods=['GET'])
 def active_users_route():
     users = [
         {
-        'username': username, 
-        'timestamp': details['timestamp']
+            'userid': userid, 
+            'username': details['username'],
+            'timestamp': details['timestamp']
         } 
-        for username, details in approved_requests.items()
-        ]
-    len(users)
+        for userid, details in approved_requests.items()
+    ]
     print(len(users))
-    # timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print("[ACTIVE USERS] Active users fetched.")
-    return jsonify({'active_users': users,'length':len(users)})
+    return jsonify({'active_users': users, 'length': len(users)})
 
-# @app.route('/active_users', methods=['GET'])
-# def active_users_route():
-#     users = [username for username in active_users if username in approved_requests and username != 'liveagent']
-#     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-#     print("[ACTIVE USERS] Active users fetched.")
-#     return jsonify({'active_users': users, 'timestamp':timestamp})
-
-@app.route('/approve_request/<username>', methods=['POST'])
-def approve_request(username):
-    if username in user_requests:
+@app.route('/approve_request/<userid>', methods=['POST'])
+def approve_request(userid):
+    if userid in user_requests:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        approved_requests[username] = user_requests.pop(username)
-        active_users.add(username)  
-        socketio.emit('request_approved', {'username': username, 'timestamp': timestamp}, room=username)
-        print(f"[APPROVE] User {username} approved and moved to approved requests.")
+        approved_requests[userid] = user_requests.pop(userid)
+        username = approved_requests[userid]['username']
+        active_users.add(userid)  
+        socketio.emit('request_approved', {'userid': userid, 'username': username, 'timestamp': timestamp}, room=userid)
+        print(f"[APPROVE] User {userid} approved and moved to approved requests.")
         return jsonify({'message': 'User approved successfully', 'timestamp': timestamp}), 200
     else:
-        print(f"[APPROVE ERROR] User {username} not found.")
+        print(f"[APPROVE ERROR] User {userid} not found.")
         return jsonify({'error': 'User not found', 'timestamp': timestamp}), 404
 
-@app.route('/approved_request/<username>', methods=['GET'])
-def approved_request(username):
-    if username in approved_requests:
-        # timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[APPROVE] User {username} approved and moved to approved requests.")
-        return jsonify({'message': 'User approved successfully', 'username': username,}), 200
+@app.route('/approved_request/<userid>', methods=['GET'])
+def approved_request(userid):
+    if userid in approved_requests:
+        username = approved_requests[userid]['username']
+        print(f"[APPROVE] User {userid} approved and moved to approved requests.")
+        return jsonify({'message': 'User approved successfully', 'userid': userid, 'username': username}), 200
     else:
-        print(f"[APPROVE ERROR] User {username} not found.")
+        print(f"[APPROVE ERROR] User {userid} not found.")
         return jsonify({'error': 'User not found'}), 404
 
 @app.route('/get_user_requests', methods=['GET'])
 def get_user_requests():
     requests = [
         {
-            'username': username,
-            'userid': details['userid'],
+            'userid': userid,
+            'username': details['username'],
             'userrole': details['userrole'],
             'timestamp': details['timestamp'],
-            'url': f'/approve_request/{username}'
+            'url': f'/approve_request/{userid}'
         }
-        for username, details in user_requests.items()
+        for userid, details in user_requests.items()
     ]
     print("[USER REQUESTS] User requests fetched.")
-    return jsonify({'user_requests': requests,'length':len(requests)})
+    return jsonify({'user_requests': requests, 'length': len(requests)})
 
 @app.route('/waiting/<username>', methods=['GET'])
 def waiting(username):
-    if username in user_requests:
+    user_found = any(details['username'] == username for details in user_requests.values())
+    if user_found:
         print(f"[WAITING] User {username} is waiting for approval.")
         return jsonify({'message': f'User {username} is waiting for approval'})
     else:
@@ -187,29 +159,36 @@ def handle_disconnect():
 @socketio.on('join')
 def handle_join(data):
     room_name = data['room_name']
-    username = data['username']
+    userid = data['userid']
     userrole = data.get('userrole', 'user')
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    join_room(room_name)
+    join_room(room_name, sid=request.sid) 
+    print("joined")
     if userrole.lower() == 'user':
-        active_users.add(username)
-    emit('notification_join', {'username': 'System', 'text': f'{username} has joined the room.', 'timestamp': timestamp}, room=room_name)
+        active_users.add(userid)
+    emit('notification_join', {'username': 'System', 'text': f'{userid} has joined the room.', 'timestamp': timestamp}, room=room_name)
 
 @socketio.on('leave')
 def handle_leave(data):
-    room_name = data['room_name']
-    username = data['username']
-    userrole = data.get('userrole', 'user')
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    leave_room(room_name)
-    if userrole.lower() == 'user':
-        active_users.discard(username)
-    emit('notification_leave', {'username': 'System', 'text': f'{username} has left the room.', 'timestamp':timestamp}, room=room_name)
+    try:
+        room_name = data['room_name']
+        userid = data['userid']
+        userrole = data.get('userrole', 'user')
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        leave_room(room_name)
+        print("leave")
+        if userrole.lower() == 'user':
+            active_users.discard(userid)
+            print('active users discared')
+        emit('notification_leave', {'username': 'System', 'text': f'{userid} has left the room.', 'timestamp': timestamp}, room=room_name)
+    except KeyError as e:
+        print(f"KeyError: {e}")
 
 @socketio.on('send_message')
 def handle_message(data):
     room_name = data['room_name']
     message = data['message']
+    print(message)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     formatted_message = f"{data['username']}: {message} ({timestamp})"
     messages.setdefault(room_name, []).append(formatted_message)
